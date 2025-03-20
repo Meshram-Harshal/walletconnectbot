@@ -98,10 +98,8 @@ async function processBlock(blockNumber) {
   
   if (!blockData || !blockData.transactions) return;
   
-  // Reduced logging - don't log block processing details
-  
-  // Process transactions in the block
-  for (const tx of blockData.transactions) {
+  // Process all transactions in parallel
+  const processingPromises = blockData.transactions.map(async tx => {
     // Check if transaction is from a monitored wallet
     if (tx.from && monitoredWallets.has(tx.from.toLowerCase()) && 
         tx.to && tx.to.toLowerCase() === VERIFICATION_WALLET.toLowerCase()) {
@@ -129,7 +127,10 @@ async function processBlock(blockNumber) {
         console.error(`Error processing transaction value`);
       }
     }
-  }
+  });
+  
+  // Wait for all transaction processing to complete
+  await Promise.all(processingPromises);
 }
 
 async function continuousBlockMonitoring() {
@@ -148,8 +149,8 @@ async function continuousBlockMonitoring() {
   try {
     const latestBlockNumber = await checkLatestBlock();
     if (!latestBlockNumber) {
-      // Try again if we couldn't get the latest block
-      setTimeout(continuousBlockMonitoring, 1000);
+      // Try again immediately if we couldn't get the latest block
+      continuousBlockMonitoring();
       return;
     }
     
@@ -159,22 +160,22 @@ async function continuousBlockMonitoring() {
     }
     
     if (latestBlockNumber > lastCheckedBlock) {
-      // Process new blocks but don't log details
+      // Process multiple blocks in parallel
+      const blockPromises = [];
       for (let block = lastCheckedBlock + 1; block <= latestBlockNumber; block++) {
-        await processBlock(block);
+        blockPromises.push(processBlock(block));
       }
+      await Promise.all(blockPromises);
       
       lastCheckedBlock = latestBlockNumber;
-    } else {
-      // No new blocks yet - don't log anything to reduce output
     }
     
-    // Always continue the monitoring loop regardless of whether new blocks were found
-    setTimeout(continuousBlockMonitoring, 1000);
+    // Continue immediately without delay
+    setImmediate(continuousBlockMonitoring);
   } catch (error) {
-    console.error("Error monitoring blockchain");
-    // Continue monitoring even after error
-    setTimeout(continuousBlockMonitoring, 3000);
+    console.error("Error monitoring blockchain:", error);
+    // Continue monitoring immediately even after error
+    setImmediate(continuousBlockMonitoring);
   }
 }
 
